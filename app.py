@@ -16,30 +16,52 @@ def get_org_info(inn):
     base_url = "https://nsi.rosminzdrav.ru/api/data"
     params = {
         "identifier": "1.2.643.5.1.13.13.11.1461",
-        "version": "6.1862",
+        # version убрали — берёт актуальную
         "query": inn,
         "page": "1",
         "size": "10",
         "queryCount": "true"
     }
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT )
+// 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept": "application/json, text/plain, */*",
         "Referer": "https://nsi.rosminzdrav.ru/",
     }
-    response = requests.get(base_url, params=params, headers=headers, verify=False)
-    if response.status_code != 200:
-        raise Exception(f"Ошибка запроса: {response.status_code}")
-
-    data = response.json()
-    active_orgs = [org for org in data.get("list", []) if not org.get("deleteDate")]
-    if not active_orgs:
-        raise Exception("Нет активной организации по этому ИНН")
-
-    active_orgs.sort(key=lambda x: x.get("modifyDate", ""), reverse=True)
-    org = active_orgs[0]
-
-    return org.get("oid"), org.get("nameFull")
+    
+    # Прокси в формате http://ip:port
+    proxies = {
+        "http": "http://79.174.12.190:80",
+        "https": "http://79.174.12.190:80",
+    }
+    
+    for attempt in range(4):  # 4 попытки
+        try:
+            response = requests.get(
+                base_url,
+                params=params,
+                headers=headers,
+                proxies=proxies,
+                verify=False,
+                timeout=60
+            )
+            if response.status_code == 200:
+                data = response.json()
+                active_orgs = [org for org in data.get("list", []) if not org.get("deleteDate")]
+                if not active_orgs:
+                    raise Exception("Нет активной организации по этому ИНН")
+                
+                active_orgs.sort(key=lambda x: x.get("modifyDate", ""), reverse=True)
+                org = active_orgs[0]
+                
+                return org.get("oid"), org.get("nameFull")
+                
+        except Exception as e:
+            if attempt == 3:
+                raise Exception(f"Не удалось получить данные через прокси (попытка {attempt+1}): {str(e)}")
+            continue  # пробуем ещё раз
+    
+    raise Exception("Не удалось подключиться к nsi.rosminzdrav.ru")    return org.get("oid"), org.get("nameFull")
 
 
 def fill_document(template_bytes, oid, name):
